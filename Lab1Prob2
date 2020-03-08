@@ -1,0 +1,76 @@
+#include <mpi.h> 
+#include <stdio.h> 
+#include <stdlib.h> 
+
+#define MAX 10
+
+int a[MAX + 1] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+int x = 3;
+
+int main(int argc, char* argv[]) {
+	int pid;
+	int number_of_processes;
+	int elements_per_process;
+	MPI_Status status;
+
+	MPI_Init(&argc, &argv);
+
+	MPI_Comm_rank(MPI_COMM_WORLD, &pid);
+	MPI_Comm_size(MPI_COMM_WORLD, &number_of_processes);
+
+	if (pid == 0) {
+		int i;
+		int start;
+		int finish;
+		int found_by_process;
+		int found = 0;
+
+		if (number_of_processes != 1)
+			elements_per_process = MAX / (number_of_processes - 1);
+		else
+			printf("What's the point of using only 1 process?");
+
+		for (i = 1; i < number_of_processes; i++) {
+			start = (i - 1) * elements_per_process;
+			finish = start + elements_per_process - 1;
+			
+			if ((MAX - finish < elements_per_process) && (MAX - finish != 0))
+				finish = MAX;
+
+			MPI_Send(&start, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+			MPI_Send(&finish, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+		}
+
+		for (i = 1; i < number_of_processes; i++) {
+			MPI_Recv(&found_by_process, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
+
+			if (found_by_process == 1)
+				found = 1;
+		}
+
+		if (found == 0)
+			printf("The number was not found.");
+
+	} else {
+		int i;
+		int start;
+		int finish;
+		int found_by_process = 0;
+
+		MPI_Recv(&start, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&finish, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+
+		for (i = start; i <= finish; i++) {
+			if (a[i] == x) {
+				printf("Process %d found the number %d at position %d.\n", pid, x, i);
+				found_by_process = 1;
+			}
+		}
+
+		MPI_Send(&found_by_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	}
+
+	MPI_Finalize();
+
+	return 0;
+}
