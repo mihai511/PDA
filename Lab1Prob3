@@ -3,8 +3,8 @@
 #include <stdlib.h> 
 #include <time.h> 
 
-#define m 1000
-#define MAX 100
+#define m 5
+#define MAX 1000
 
 int main(int argc, char* argv[]) {
 	int pid;
