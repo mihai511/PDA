@@ -8,44 +8,57 @@
 int main(int argc, char* argv[]) {
 	int pid;
 	int number_of_processes;
-	int elements_per_process;
-	int start;
-	int finish;
-	int sendbuf[MAX] = { 1, 1, 3, 4, 2, 7, 1, 3, 5, 5, 7, 4, 8, 11, 5, 7, 8, 23, 12, 5 };
-	int result = -1;
-	int i;
+	int sendbuf[MAX];
+	int max_pos = -1;
+	int found_max_pos = -1;
 
 	MPI_Init(&argc, &argv);
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &pid);
 	MPI_Comm_size(MPI_COMM_WORLD, &number_of_processes);
 
-	MPI_Bcast(sendbuf, MAX, MPI_INT, 0, MPI_COMM_WORLD);
+	if (pid == 0) {
+		int i;
 
-	elements_per_process = MAX / number_of_processes;
+		printf("Enter the elements of the array:");
 
-	start = pid * elements_per_process;
-
-	if(pid != number_of_processes - 1)
-		finish = start + elements_per_process - 1;
-	else
-		finish = MAX;
-
-	for (i = start; i <= finish; i++) {
-		if (sendbuf[i] == x) {
-			MPI_Reduce(&i, &result, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-			printf("Process %d found the number %d at position %d.\n", pid, x, i);
+		for (i = 0; i < MAX; i++) {
+			scanf_s("%d", &sendbuf[i]);
 		}
-	}
 
-	MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Bcast(&sendbuf, MAX, MPI_INT, 0, MPI_COMM_WORLD);
 
-	if (pid == 0)
-		if (result != -1)
-			printf("The maximum position at which %d was found is %d.\n", x, result);
+		MPI_Reduce(&found_max_pos, &max_pos, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+
+		if (max_pos != -1)
+			printf("The maximum position at which %d was found is %d.\n", x, max_pos);
 		else
 			printf("The number was not found.");
+	} else {
+		int start;
+		int finish;
+		int i;
+		int elements_per_process = MAX / number_of_processes;
 
+		MPI_Bcast(&sendbuf, MAX, MPI_INT, 0, MPI_COMM_WORLD);
+
+		start = (pid - 1) * elements_per_process;
+
+		if (pid != number_of_processes - 1)
+			finish = start + elements_per_process - 1;
+		else
+			finish = MAX;
+
+		for (i = start; i <= finish; i++) {
+			if (sendbuf[i] == x) {
+				printf("Process %d found the number %d at position %d.\n", pid, x, i);
+				found_max_pos = i;
+			}
+		}
+
+		MPI_Reduce(&found_max_pos, NULL, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+	}
+		
 	MPI_Finalize();
 
 	return 0;
