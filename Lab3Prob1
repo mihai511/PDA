@@ -1,0 +1,102 @@
+#include <mpi.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <string.h>
+using namespace std;
+
+#define N 10
+
+typedef struct {
+	int id;
+	char firstname[20];
+} Student;
+
+int main(int argc, char* argv[])
+{
+	int pid;
+	int numberOfProcesses;
+	int founds[N];
+	int localFound = 0;
+
+	Student sendStudents[N];
+	Student recvStudents[N];
+	Student studentToFind;
+
+	int blockLenghts[2] = { 1, 20 };
+	MPI_Datatype types[2] = { MPI_INT, MPI_CHAR };
+	MPI_Aint offsets[2] = { offsetof(Student, id), offsetof(Student, firstname) };
+	MPI_Datatype studentType;
+
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &numberOfProcesses);
+	MPI_Comm_rank(MPI_COMM_WORLD, &pid);
+	MPI_Type_create_struct(2, blockLenghts, offsets, types, &studentType);
+	MPI_Type_commit(&studentType);
+	
+	studentToFind = { 1, "Mihai" };
+
+	int sendCount = N / numberOfProcesses;
+
+	if (pid == 0) {
+		int found = 0;
+
+		sendStudents[0] = { 1, "Mihai" };
+		sendStudents[1] = { 2, "Alex" };
+		sendStudents[2] = { 3, "Andrei" };
+		sendStudents[3] = { 4, "Oana" };
+		sendStudents[4] = { 5, "Diana" };
+		sendStudents[5] = { 6, "Mircea" };
+		sendStudents[6] = { 7, "Radu" };
+		sendStudents[7] = { 8, "Calin" };
+		sendStudents[8] = { 9, "Stefan" };
+
+
+		MPI_Scatter(sendStudents, sendCount, studentType, recvStudents, sendCount, studentType, 0, MPI_COMM_WORLD);
+
+		for (int i = 0; i < sendCount; i++) {
+			if (recvStudents[i].id == studentToFind.id) {
+				if (strcmp(recvStudents[i].firstname, studentToFind.firstname) == 0) {
+					localFound = 1;
+					break;
+				}
+			}
+		}
+
+		MPI_Gather(&localFound, 1, MPI_INT, founds, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		for (int i = 0; i < numberOfProcesses; i++) {
+			if (founds[i] == 1) {
+				found = 1;
+				break;
+			}
+		}
+
+		if (found == 1) {
+			printf("Student %d. %s was found!\n", studentToFind.id, studentToFind.firstname);
+		}
+		else {
+			printf("Student %d. %s was not found!\n", studentToFind.id, studentToFind.firstname);
+		}
+
+		
+	} else {
+		MPI_Scatter(sendStudents, sendCount, studentType, recvStudents, sendCount, studentType, 0, MPI_COMM_WORLD);
+
+		for (int i = 0; i < sendCount; i++) {
+			if (recvStudents[i].id == studentToFind.id) {
+				if (strcmp(recvStudents[i].firstname, studentToFind.firstname) == 0) {
+					localFound = 1;
+					break;
+				}
+			}
+		}
+
+		MPI_Gather(&localFound, 1, MPI_INT, &founds, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	}
+
+	MPI_Type_free(&studentType);
+	MPI_Finalize();
+
+	return 0;
+}
