@@ -1,0 +1,231 @@
+#include "mpi.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <string>
+#include <ctype.h>
+
+using namespace std;
+
+int main(int argc, char* argv[]) {
+    int const vectorSize = 10;
+    int vector[vectorSize] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    
+    MPI_Group originalGroup, newGroup;
+    MPI_Comm newComm;
+
+    int groupSize, *sumGroupRanks, *prodGroupRanks, *minGroupRanks, *maxGroupRanks;
+
+    MPI_Status status;
+    MPI_Init(&argc, &argv);
+
+    int globalRank, globalSize;
+    MPI_Comm_rank(MPI_COMM_WORLD, &globalRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &globalSize);
+
+    MPI_Comm_group(MPI_COMM_WORLD, &originalGroup);
+
+    if (globalSize % 4 != 0) {
+        if (globalRank == 0) {
+            cout << "The number of processes must be divisible by 4.";
+        }
+
+        MPI_Finalize();
+        exit(0);
+    }
+
+    groupSize = globalSize / 4;
+    sumGroupRanks = (int*)malloc(sizeof(int) * groupSize);
+    prodGroupRanks = (int*)malloc(sizeof(int) * groupSize);
+    minGroupRanks = (int*)malloc(sizeof(int) * groupSize);
+    maxGroupRanks = (int*)malloc(sizeof(int) * groupSize);
+
+    for (int i = 0; i < groupSize; i++) {
+        sumGroupRanks[i] = i * 4;
+        prodGroupRanks[i] = i * 4+1;
+        minGroupRanks[i] = i * 4+2;
+        maxGroupRanks[i] = i * 4+3;
+    }
+
+    if (globalRank % 4 == 0) {
+        MPI_Group_incl(originalGroup, groupSize, sumGroupRanks, &newGroup);
+    }
+
+    if (globalRank % 4 == 1) {
+        MPI_Group_incl(originalGroup, groupSize, prodGroupRanks, &newGroup);
+    }
+
+    if (globalRank % 4 == 2) {
+        MPI_Group_incl(originalGroup, groupSize, minGroupRanks, &newGroup);
+    }
+
+    if (globalRank % 4 == 3) {
+        MPI_Group_incl(originalGroup, groupSize, maxGroupRanks, &newGroup);
+    }
+
+    MPI_Comm_create(MPI_COMM_WORLD, newGroup, &newComm);
+
+
+    //SUM
+    if (globalRank % groupSize == 0) {
+        int groupRank;
+
+        MPI_Comm_rank(newComm, &groupRank);
+        
+        if (groupRank == 0) {
+            int totalSum = 0, auxSum;
+  
+            for (int i = 1; i < groupSize; i++) {
+                int start = (i - 1) * vectorSize / (groupSize - 1);
+                int end = i * vectorSize / (groupSize - 1) - 1;
+
+                MPI_Send(&start, 1, MPI_INT, i, i, newComm);
+                MPI_Send(&end, 1, MPI_INT, i, i, newComm);
+            }
+          
+            for (int i = 1; i < groupSize; i++) {
+                MPI_Recv(&auxSum, 1, MPI_INT, i, i, newComm, &status);
+                totalSum += auxSum;
+            }
+
+            cout << " - The sum is: " << totalSum << endl;
+        } else {
+            int start, end, sum = 0;
+ 
+            MPI_Recv(&start, 1, MPI_INT, 0, groupRank, newComm, &status);
+            MPI_Recv(&end, 1, MPI_INT, 0, groupRank, newComm, &status);
+          
+            for (int i = start; i <= end; i++) {
+                sum += vector[i];
+            }
+
+            MPI_Send(&sum, 1, MPI_INT, 0, groupRank, newComm);
+        }
+    }
+
+    //PROD
+    if (globalRank % groupSize == 1) {
+        int groupRank;
+
+        MPI_Comm_rank(newComm, &groupRank);
+
+        if (groupRank == 0) {
+            long long totalProd = 1;
+            int auxProd;
+ 
+            for (int i = 1; i < groupSize; i++) {
+                int start = (i - 1) * vectorSize / (groupSize - 1);
+                int end = i * vectorSize / (groupSize - 1) - 1;
+
+                MPI_Send(&start, 1, MPI_INT, i, i, newComm);
+                MPI_Send(&end, 1, MPI_INT, i, i, newComm);
+            }
+       
+            for (int i = 1; i < groupSize; i++) {
+                MPI_Recv(&auxProd, 1, MPI_INT, i, i, newComm, &status);
+                totalProd *= auxProd;
+            }
+            cout << " - The produce is: " << totalProd << endl;
+        } else {
+            int start, end, prod = 1;
+
+            MPI_Recv(&start, 1, MPI_INT, 0, groupRank, newComm, &status);
+            MPI_Recv(&end, 1, MPI_INT, 0, groupRank, newComm, &status);
+
+            for (int i = start; i <= end; i++) {
+                prod *= vector[i];
+            }
+
+            MPI_Send(&prod, 1, MPI_INT, 0, groupRank, newComm);
+        }
+    }
+
+    //MIN
+    if (globalRank % groupSize == 2) {
+        int groupRank;
+
+        MPI_Comm_rank(newComm, &groupRank);
+
+        if (groupRank == 0) {
+            int totalMin = INT16_MAX, auxMin;
+           
+            for (int i = 1; i < groupSize; i++) {
+                int start = (i - 1) * vectorSize / (groupSize - 1);
+                int end = i * vectorSize / (groupSize - 1) - 1;
+
+                MPI_Send(&start, 1, MPI_INT, i, i, newComm);
+                MPI_Send(&end, 1, MPI_INT, i, i, newComm);
+            }
+            
+            for (int i = 1; i < groupSize; i++) {
+                MPI_Recv(&auxMin, 1, MPI_INT, i, i, newComm, &status);
+
+                if (totalMin > auxMin) {
+                    totalMin = auxMin;
+                }
+            }
+
+            cout << " - The Minimum is: " << totalMin << endl;
+        } else {
+            int start, end, min = INT16_MAX;
+
+            MPI_Recv(&start, 1, MPI_INT, 0, groupRank, newComm, &status);
+            MPI_Recv(&end, 1, MPI_INT, 0, groupRank, newComm, &status);
+         
+            for (int i = start; i <= end; i++) {
+                if (vector[i] < min) {
+                    min = vector[i];
+                }
+            }
+           
+            MPI_Send(&min, 1, MPI_INT, 0, groupRank, newComm);
+        }
+    }
+
+    //MAX
+    if (globalRank % groupSize == 3) {
+        int groupRank;
+
+        MPI_Comm_rank(newComm, &groupRank);
+
+        if (groupRank == 0) {
+            int totalMax = INT16_MIN, auxMax;
+
+            for (int i = 1; i < groupSize; i++) {
+                int start = (i - 1) * vectorSize / (groupSize - 1);
+                int end = i * vectorSize / (groupSize - 1) - 1;
+
+                MPI_Send(&start, 1, MPI_INT, i, i, newComm);
+                MPI_Send(&end, 1, MPI_INT, i, i, newComm);
+            }
+
+            for (int i = 1; i < groupSize; i++) {
+                MPI_Recv(&auxMax, 1, MPI_INT, i, i, newComm, &status);
+
+                if (totalMax < auxMax) {
+                    totalMax = auxMax;
+                }
+            }
+
+            cout << " - The Maximum is: " << totalMax << endl;
+        } else {
+            int start, end, max = INT16_MIN;
+
+            MPI_Recv(&start, 1, MPI_INT, 0, groupRank, newComm, &status);
+            MPI_Recv(&end, 1, MPI_INT, 0, groupRank, newComm, &status);
+
+            for (int i = start; i <= end; i++) {
+                if (vector[i] > max) {
+                    max = vector[i];
+                }
+            }
+            //Send the computed data to the master process
+            MPI_Send(&max, 1, MPI_INT, 0, groupRank, newComm);
+        }
+    }
+
+    MPI_Group_free(&newGroup);
+    MPI_Comm_free(&newComm);
+    MPI_Finalize();
+    return 0;
+}
